@@ -4,7 +4,7 @@
 
 本项目是基于字节跳动 TTS WebSocket 服务的 Python 客户端实现，支持流式语音合成和音频播放，适合快速集成和测试。
 
-# 接口文档
+# 火山官方接口文档
 https://www.volcengine.com/docs/6561/1329505
 
 ## 安装依赖
