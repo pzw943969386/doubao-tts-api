@@ -217,7 +217,7 @@ class Request:
         return (header, optional, payload)
 
 
-class BytedanceClient:
+class DoubaoTTSClient:
     def __init__(
         self,
         uid: str,
@@ -250,7 +250,7 @@ class BytedanceClient:
         self.start_connection_event = asyncio.Event()
         self.start_session_event = asyncio.Event()
 
-    def gen_log_id():
+    def gen_log_id(self):
         ts = int(time.time() * 1000)
         r = fastrand.pcg32bounded(1 << 24) + (1 << 20)
         local_ip = "00000000000000000000000000000000"
@@ -277,6 +277,7 @@ class BytedanceClient:
                     pass
                 elif isinstance(message, bytes):
                     res = self.parser_response(message)
+                    print("收到事件:", res.optional.event)
                     if res.optional.event == EVENT_ConnectionStarted:
                         self.start_connection_event.set()
                     elif res.optional.event == EVENT_SessionStarted:
@@ -286,12 +287,15 @@ class BytedanceClient:
                         and res.header.message_type == AUDIO_ONLY_RESPONSE
                     ):
                         if self.callback:
-                            self.callback.on_data()
+                            self.callback.on_data(res.payload)
                     elif res.optional.event in [
                         EVENT_TTSSentenceStart,
                         EVENT_TTSSentenceEnd,
                     ]:
                         continue
+                    else:
+                        if self.callback:
+                            self.callback.on_complete()
         except Exception as e:
             self.callback.on_error(e)
 
@@ -311,13 +315,13 @@ class BytedanceClient:
                     additional_headers=headers,
                     max_size=1024 * 1024 * 100,
                 )
+                print("start_connection")
                 start_request = await self.request.start_connection()
                 await self.__send_event(*start_request)
 
                 self.websocket_task = asyncio.create_task(self._message_loop())
 
-                if not self.start_connection_event.wait(5):
-                    raise Exception("TTS is not started")
+                await asyncio.wait_for(self.start_connection_event.wait(), timeout=5)
 
                 self.session_id = str(uuid.uuid4())
                 start_session_request = await self.request.start_session(
@@ -325,13 +329,15 @@ class BytedanceClient:
                 )
                 await self.__send_event(*start_session_request)
 
-                if not self.start_session_event.wait(5):
-                    raise Exception("TTS is not started")
+                await asyncio.wait_for(self.start_session_event.wait(), timeout=5)
 
                 self._is_started = True
                 if self.callback:
                     self.callback.on_open()
+            except asyncio.TimeoutError:
+                raise Exception("TTS is not started")
             except Exception as e:
+                print(e)
                 self.callback.on_error(e)
 
     async def __send_text(self, speaker: str, text: str, session_id):
@@ -358,7 +364,7 @@ class BytedanceClient:
     async def streaming_call(self, text: str):
         if self._is_first:
             self._is_first = False
-            self.__start_task()
+            await self.__start_task()
 
         await self.__submit_text(text)
 
