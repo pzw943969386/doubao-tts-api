@@ -6,7 +6,7 @@ import time
 import uuid
 import websockets
 import asyncio
-from tts_api import DoubaoTTSClient
+from api import DoubaoTTSClient
 
 SAMPLE_RATE = 24000
 CHANNELS = 1
@@ -61,9 +61,6 @@ class ResultCallback:
         try:
             if data and len(data) > 0:
                 audio_buffer.append(data)
-                print(
-                    f"收到音频数据: {len(data)} 字节，缓冲区大小: {len(audio_buffer)}"
-                )
         except Exception as e:
             print(f"音频数据处理错误: {e}")
 
@@ -72,9 +69,9 @@ async def main():
     print("启动字节跳动TTS测试...")
 
     # 需要替换为你的实际参数
-    uid = ""
-    app_id = ""
-    token = ""
+    uid = "2101744687"
+    app_id = "9642034745"
+    token = "ioBQTr8ZpPt2iLKNNekPFztpnVewysbo"
     url = "wss://openspeech.bytedance.com/api/v3/tts/bidirection"
     speaker = "zh_female_wanwanxiaohe_moon_bigtts"
 
@@ -86,7 +83,7 @@ async def main():
         await client.streaming_call(
             "你好，我是字节跳动的语音合成系统，很高兴为您服务！"
         )
-        await asyncio.sleep(2)
+        await asyncio.sleep(2)  # 等待处理
 
         await client.streaming_complete()
 
@@ -99,6 +96,19 @@ async def main():
     finally:
         print("测试完成")
 
+async def test_connect():
+    headers = {
+        "X-Api-App-Key": "9642034745",
+        "X-Api-Access-Key": "ioBQTr8ZpPt2iLKNNekPFztpnVewysbo",
+        "X-Api-Resource-Id": "volc.service_type.10029",
+        "X-Api-Connect-Id": str(uuid.uuid4()),
+    }
+    await websockets.connect(
+        "wss://openspeech.bytedance.com/api/v3/tts/bidirection",
+        additional_headers=headers,
+        max_size=1024 * 1024 * 100,
+    )
 
 if __name__ == "__main__":
     asyncio.run(main())
+    # asyncio.run(test_connect())
