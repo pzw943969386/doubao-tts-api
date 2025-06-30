@@ -277,7 +277,6 @@ class DoubaoTTSClient:
                     pass
                 elif isinstance(message, bytes):
                     res = self.parser_response(message)
-                    print("收到事件:", res.optional.event)
                     if res.optional.event == EVENT_ConnectionStarted:
                         self.start_connection_event.set()
                     elif res.optional.event == EVENT_SessionStarted:
@@ -315,7 +314,6 @@ class DoubaoTTSClient:
                     additional_headers=headers,
                     max_size=1024 * 1024 * 100,
                 )
-                print("start_connection")
                 start_request = await self.request.start_connection()
                 await self.__send_event(*start_request)
 
@@ -337,7 +335,6 @@ class DoubaoTTSClient:
             except asyncio.TimeoutError:
                 raise Exception("TTS is not started")
             except Exception as e:
-                print(e)
                 self.callback.on_error(e)
 
     async def __send_text(self, speaker: str, text: str, session_id):

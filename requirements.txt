@@ -1,4 +1,4 @@
-websockets
-numpy
-sounddevice
-fastrand
+websockets>=15.0.1
+numpy>=1.24.3
+sounddevice>=0.5.2
+fastrand>=3.0.6
