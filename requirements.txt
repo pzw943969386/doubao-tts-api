@@ -1,1 +1,4 @@
+websockets
+numpy
+sounddevice
 fastrand
