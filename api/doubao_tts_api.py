@@ -249,6 +249,7 @@ class DoubaoTTSClient:
 
         self.start_connection_event = asyncio.Event()
         self.start_session_event = asyncio.Event()
+        self.complete_event = asyncio.Event()
 
     def gen_log_id(self):
         ts = int(time.time() * 1000)
@@ -301,13 +302,13 @@ class DoubaoTTSClient:
     async def __start_task(self):
         async with self._lock:
             try:
-                log_id = self.gen_log_id()
+                # log_id = self.gen_log_id()
                 headers = {
                     "X-Api-App-Key": self.app_id,
                     "X-Api-Access-Key": self.token,
                     "X-Api-Resource-Id": "volc.service_type.10029",
                     "X-Api-Connect-Id": str(uuid.uuid4()),
-                    "X-Tt-Logid": log_id,
+                    # "X-Tt-Logid": log_id,
                 }
                 self.websocket = await websockets.connect(
                     self.url,
@@ -380,6 +381,22 @@ class DoubaoTTSClient:
 
         self._is_stopped = True
         self._is_started = False
+
+    async def streaming_cancel(self):
+        if not self._is_started:
+            raise Exception("TTS is not started")
+
+        if self._is_stopped:
+            return
+
+        finish_session_request = await self.request.finish_session(self.session_id)
+        await self.__send_event(*finish_session_request)
+
+        finish_connection_request = await self.request.finish_connection()
+        await self.__send_event(*finish_connection_request)
+
+        self.start_connection_event.set()
+        self.complete_event.set()
 
     def read_res_content(self, res: bytes, offset: int):
         content_size = int.from_bytes(res[offset : offset + 4])

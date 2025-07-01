@@ -69,9 +69,9 @@ async def main():
     print("启动字节跳动TTS测试...")
 
     # 需要替换为你的实际参数
-    uid = "2101744687"
-    app_id = "9642034745"
-    token = "ioBQTr8ZpPt2iLKNNekPFztpnVewysbo"
+    uid = ""
+    app_id = ""
+    token = ""
     url = "wss://openspeech.bytedance.com/api/v3/tts/bidirection"
     speaker = "zh_female_wanwanxiaohe_moon_bigtts"
 
@@ -98,8 +98,8 @@ async def main():
 
 async def test_connect():
     headers = {
-        "X-Api-App-Key": "9642034745",
-        "X-Api-Access-Key": "ioBQTr8ZpPt2iLKNNekPFztpnVewysbo",
+        "X-Api-App-Key": "",
+        "X-Api-Access-Key": "",
         "X-Api-Resource-Id": "volc.service_type.10029",
         "X-Api-Connect-Id": str(uuid.uuid4()),
     }
