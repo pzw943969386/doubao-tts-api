@@ -292,11 +292,19 @@ class DoubaoTTSClient:
                         EVENT_TTSSentenceStart,
                         EVENT_TTSSentenceEnd,
                     ]:
-                        continue
+                        if self.callback:
+                            self.callback.on_event(res.payload_json)
                     else:
                         if self.callback:
                             self.callback.on_complete()
+        except websockets.exceptions.ConnectionClosed:
+            self.websocket_task = None
+            self.callback.on_close()
+        except asyncio.CancelledError:
+            self.websocket_task = None
+            self.callback.on_close()
         except Exception as e:
+            self.websocket_task = None
             self.callback.on_error(e)
 
     async def __start_task(self):
@@ -379,8 +387,11 @@ class DoubaoTTSClient:
         finish_connection_request = await self.request.finish_connection()
         await self.__send_event(*finish_connection_request)
 
+        await self.close()
         self._is_stopped = True
         self._is_started = False
+        self.start_connection_event.set()
+        self.complete_event.set()
 
     async def streaming_cancel(self):
         if not self._is_started:
@@ -395,8 +406,18 @@ class DoubaoTTSClient:
         finish_connection_request = await self.request.finish_connection()
         await self.__send_event(*finish_connection_request)
 
+        await self.close()
+        self._is_stopped = True
+        self._is_started = False
         self.start_connection_event.set()
         self.complete_event.set()
+
+    async def close(self):
+        if self.websocket and self.websocket.state == State.OPEN:
+            await self.websocket.close()
+        if self.websocket_task:
+            self.websocket_task.cancel()
+            await self.websocket_task
 
     def read_res_content(self, res: bytes, offset: int):
         content_size = int.from_bytes(res[offset : offset + 4])
@@ -420,15 +441,15 @@ class DoubaoTTSClient:
         header.header_size = res[0] & 0x0F
         header.message_type = (res[1] >> 4) & num
         header.message_type_specific_flags = res[1] & 0x0F
-        header.serialization_method = res[2] >> num
+        header.serialization_method = (res[2] >> 4) & num
         header.message_compression = res[2] & 0x0F
         header.reserved = res[3]
 
         offset = 4
         optional = response.optional
-        if header.message_type == FULL_SERVER_RESPONSE or AUDIO_ONLY_RESPONSE:
+        if header.message_type in [FULL_SERVER_RESPONSE, AUDIO_ONLY_RESPONSE]:
             if header.message_type_specific_flags == MsgTypeFlagWithEvent:
-                optional.event = int.from_bytes(res[offset:8])
+                optional.event = int.from_bytes(res[offset : offset + 4], "big")
                 offset += 4
                 if optional.event == EVENT_NONE:
                     return response
