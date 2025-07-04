@@ -295,13 +295,12 @@ class DoubaoTTSClient:
                         if self.callback:
                             self.callback.on_complete()
                     elif res.optional.event in [
-                        EVENT_ConnectionFinished,
+                        EVENT_ConnectionFailed,
                         EVENT_SessionFailed,
                     ]:
                         self._is_started = False
                         self._is_stopped = True
                         self.complete_event.set()
-                        self.start_connection_event.set()
                         if self.callback:
                             self.callback.on_error(res.response_meta_json)
                     else:
