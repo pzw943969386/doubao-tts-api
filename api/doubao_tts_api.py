@@ -2,8 +2,8 @@ import websockets
 import json
 import uuid
 import asyncio
-import time
-import fastrand
+
+# import fastrand
 from websockets.protocol import State
 
 PROTOCOL_VERSION = 0b0001
@@ -251,11 +251,11 @@ class DoubaoTTSClient:
         self.start_session_event = asyncio.Event()
         self.complete_event = asyncio.Event()
 
-    def gen_log_id(self):
-        ts = int(time.time() * 1000)
-        r = fastrand.pcg32bounded(1 << 24) + (1 << 20)
-        local_ip = "00000000000000000000000000000000"
-        return f"02{ts}{local_ip}{r:08x}"
+    # def gen_log_id(self):
+    #     ts = int(time.time() * 1000)
+    #     r = fastrand.pcg32bounded(1 << 24) + (1 << 20)
+    #     local_ip = "00000000000000000000000000000000"
+    #     return f"02{ts}{local_ip}{r:08x}"
 
     async def __send_event(
         self, header: bytes, optional: bytes | None = None, payload: bytes = None
@@ -288,15 +288,25 @@ class DoubaoTTSClient:
                     ):
                         if self.callback:
                             self.callback.on_data(res.payload)
-                    elif res.optional.event in [
-                        EVENT_TTSSentenceStart,
-                        EVENT_TTSSentenceEnd,
-                    ]:
-                        if self.callback:
-                            self.callback.on_event(res.payload_json)
-                    else:
+                    elif res.optional.event == EVENT_TTSSentenceStart:
+                        pass
+                    elif res.optional.event == EVENT_TTSSentenceEnd:
+                        self.complete_event.set()
                         if self.callback:
                             self.callback.on_complete()
+                    elif res.optional.event in [
+                        EVENT_ConnectionFinished,
+                        EVENT_SessionFailed,
+                    ]:
+                        self._is_started = False
+                        self._is_stopped = True
+                        self.complete_event.set()
+                        self.start_connection_event.set()
+                        if self.callback:
+                            self.callback.on_error(res.response_meta_json)
+                    else:
+                        if self.callback:
+                            self.callback.on_event(res.payload_json)
         except websockets.exceptions.ConnectionClosed:
             self.websocket_task = None
             self.callback.on_close()
@@ -308,43 +318,48 @@ class DoubaoTTSClient:
             self.callback.on_error(e)
 
     async def __start_task(self):
-        async with self._lock:
-            try:
-                # log_id = self.gen_log_id()
-                headers = {
-                    "X-Api-App-Key": self.app_id,
-                    "X-Api-Access-Key": self.token,
-                    "X-Api-Resource-Id": "volc.service_type.10029",
-                    "X-Api-Connect-Id": str(uuid.uuid4()),
-                    # "X-Tt-Logid": log_id,
-                }
-                self.websocket = await websockets.connect(
-                    self.url,
-                    additional_headers=headers,
-                    max_size=1024 * 1024 * 100,
-                )
-                start_request = await self.request.start_connection()
-                await self.__send_event(*start_request)
+        if self.callback is None:
+            raise Exception("callback is not set")
 
-                self.websocket_task = asyncio.create_task(self._message_loop())
+        if self._is_started:
+            raise Exception("TTS is already started")
 
-                await asyncio.wait_for(self.start_connection_event.wait(), timeout=5)
+        try:
+            # log_id = self.gen_log_id()
+            headers = {
+                "X-Api-App-Key": self.app_id,
+                "X-Api-Access-Key": self.token,
+                "X-Api-Resource-Id": "volc.service_type.10029",
+                "X-Api-Connect-Id": str(uuid.uuid4()),
+                # "X-Tt-Logid": log_id,
+            }
+            self.websocket = await websockets.connect(
+                self.url,
+                additional_headers=headers,
+                max_size=1024 * 1024 * 100,
+            )
+            start_request = await self.request.start_connection()
+            await self.__send_event(*start_request)
 
-                self.session_id = str(uuid.uuid4())
-                start_session_request = await self.request.start_session(
-                    self.speaker, self.session_id
-                )
-                await self.__send_event(*start_session_request)
+            self.websocket_task = asyncio.create_task(self._message_loop())
 
-                await asyncio.wait_for(self.start_session_event.wait(), timeout=5)
+            await asyncio.wait_for(self.start_connection_event.wait(), timeout=5)
 
-                self._is_started = True
-                if self.callback:
-                    self.callback.on_open()
-            except asyncio.TimeoutError:
-                raise Exception("TTS is not started")
-            except Exception as e:
-                self.callback.on_error(e)
+            self.session_id = str(uuid.uuid4())
+            start_session_request = await self.request.start_session(
+                self.speaker, self.session_id
+            )
+            await self.__send_event(*start_session_request)
+
+            await asyncio.wait_for(self.start_session_event.wait(), timeout=5)
+
+            self._is_started = True
+            if self.callback:
+                self.callback.on_open()
+        except asyncio.TimeoutError:
+            raise Exception("TTS is not started")
+        except Exception as e:
+            self.callback.on_error(e)
 
     async def __send_text(self, speaker: str, text: str, session_id):
         header = Header(
@@ -387,11 +402,11 @@ class DoubaoTTSClient:
         finish_connection_request = await self.request.finish_connection()
         await self.__send_event(*finish_connection_request)
 
+        await self.complete_event.wait()
+
         await self.close()
         self._is_stopped = True
         self._is_started = False
-        self.start_connection_event.set()
-        self.complete_event.set()
 
     async def streaming_cancel(self):
         if not self._is_started:
